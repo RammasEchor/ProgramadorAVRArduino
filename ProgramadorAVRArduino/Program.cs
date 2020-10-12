@@ -8,28 +8,30 @@ namespace ProgramadorAVRArduino
 {
     class Program
     {
-        public static char[] animation = {'/','|','\\'};
+        public static string[] animation = {"[-]","[\\]","[|]","[/]"};
         public static int animationIndex = 0 ;
         public static List<string> portsProgrammed ;
+        public static int animChars = 3 ;
 
         static void Main(string[] args)
         {
             portsProgrammed = new List<string>();
 
+            Console.Write("Waiting for COM...{0}", animation[animationIndex]);
             while( true )
             {
                 Thread.Sleep( 500 );
+                Animation();
                 string[] ports = SerialPort.GetPortNames();
                 var portsNotProgrammed = Array.FindAll( ports, port => !portsProgrammed.Exists( p => port == p ) );
 
-                Array.ForEach( portsNotProgrammed, p => ProgramPort( p ));
+                Array.ForEach( portsNotProgrammed, p => {
+                    Console.SetCursorPosition( 0, Console.CursorTop );
+                    Console.WriteLine("Port {0} found; about to programm...", p );
+                    ProgramPort( p );
+                    Console.Write("Waiting for COM...{0}", animation[animationIndex]);
+                });
             }
-        }
-
-        public static string WaitingForIOAnimation()
-        {
-            animationIndex = (animationIndex + 1) % 3 ;
-            return("Waiting for IO..." + animation[animationIndex]);
         }
 
         public static void ProgramPort( string port )
@@ -51,7 +53,15 @@ namespace ProgramadorAVRArduino
             {
                 avrWriter.Dispose();
                 portsProgrammed.Add( port );
+                Console.WriteLine("Port {0} programmed.", port );
             }
+        }
+
+        public static void Animation()
+        {  
+            animationIndex = (animationIndex + 1)  % 3 ;
+            Console.SetCursorPosition( Console.CursorLeft - animChars, Console.CursorTop );
+            Console.Write( animation[animationIndex] );
         }
     }
 }
