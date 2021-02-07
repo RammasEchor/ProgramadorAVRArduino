@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Ports;
+using System.IO;
 using System.Threading;
 using System.Runtime.InteropServices;
 
@@ -11,7 +12,7 @@ namespace ProgramadorAVRArduino
     {
         public static string[] animation = { "[-]", "[\\]", "[|]", "[/]" };
         public static int animationIndex = 0;
-        public static List<string> portsProgrammed;
+        public static List<string> constantPorts;
         public static int animChars = 3;
 
         static void Main(string[] args)
@@ -23,7 +24,7 @@ namespace ProgramadorAVRArduino
                 processInfo.FileName = "avrdude";
                 // The file to programm (.hex) should be in the current directory.
                 processInfo.Arguments = $@"-v -p atmega328p -c arduino -P ~PORT~ -b 115200 -D 
-                -U flash:w:""{Environment.CurrentDirectory}/Test_LESD.hex"":i";
+                -U flash:w:""~FILE~"":i";
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -32,7 +33,7 @@ namespace ProgramadorAVRArduino
                 // The file to programm (.hex) should be in the same directory as the .exe
                 processInfo.Arguments = $@"-C ""{Environment.CurrentDirectory}/AVRdude/avrdude.conf"" 
                 -v -p atmega328p -c arduino -P//./~PORT~ -b 115200 -D 
-                -U flash:w:""{Environment.CurrentDirectory}/Test_LESD.hex"":i";
+                -U flash:w:""~FILE~"":i";
             }
 
             // We clean the c# multiline string
@@ -40,28 +41,68 @@ namespace ProgramadorAVRArduino
             processInfo.Arguments = processInfo.Arguments.Replace("\r", null);
             // Set up the port substitution
             string arguments = processInfo.Arguments.Replace("~PORT~", "{0}");
+            // Set up file substitution
+            arguments = arguments.Replace("~FILE~", "{1}");
 
-            portsProgrammed = new List<string>();
+            // Get the file to programm (.hex)
+            string arduinoProgram = null;
+            string[] files = Directory.GetFiles(Environment.CurrentDirectory);
+            files = Array.FindAll(files, file => file.Contains(".hex"));
+            Array.ForEach(files, file =>
+            {
+                Console.WriteLine("[{0}] {1}", Array.IndexOf(files, file), file);
+            });
 
+            Console.WriteLine();
+            Console.Write("Select the program (number) []: ");
+
+            while (Console.KeyAvailable)
+            {
+                Console.ReadKey(true);
+            }
+
+            int programNumber = int.Parse(Console.ReadLine());
+            if (programNumber >= 0 && programNumber < files.Length)
+                arduinoProgram = files[programNumber];
+            else
+            {
+                Console.WriteLine("Non valid input.");
+                return;
+            }
+
+            // We save the ports that are programmed.
+            constantPorts = new List<string>();
+            Array.ForEach(SerialPort.GetPortNames(), port =>
+            {
+                constantPorts.Add(port);
+            });
             Console.Write("Waiting for ports...{0}", animation[animationIndex]);
             while (true)
             {
                 Thread.Sleep(500);
                 Animation();
                 string[] ports = SerialPort.GetPortNames();
-                var portsNotProgrammed = Array.FindAll(ports, port => !portsProgrammed.Exists(p => port == p));
+                // Each new port detected (even if it's just reconnected) is programmed
+                var portsToProgramm = Array.FindAll(ports, port => !constantPorts.Exists(p => port == p));
 
-                Array.ForEach(portsNotProgrammed, p =>
+                Array.ForEach(portsToProgramm, p =>
                 {
                     Console.SetCursorPosition(0, Console.CursorTop);
                     Console.WriteLine("Port {0} found; about to programm...", p);
                     // Port name substitution: {0} => Port name
-                    processInfo.Arguments = string.Format(arguments, p);
+                    processInfo.Arguments = string.Format(arguments, p, arduinoProgram);
                     int exitCode = ProgramPort(processInfo);
-                    portsProgrammed.Add(p);
-                    Console.WriteLine("Port {0} {1} programmed, exit code: {2}", p, exitCode != 0 ? "not": "", exitCode );
-                    Console.Write("Waiting for COM...{0}", animation[animationIndex]);
+                    Console.WriteLine("Port {0} {1} programmed, exit code: {2}", p, exitCode != 0 ? "not" : "", exitCode);
+                    constantPorts.Add(p);
+                    Console.Write("Waiting for ports...{0}", animation[animationIndex]);
                 });
+
+                constantPorts.Clear();
+                Array.ForEach(SerialPort.GetPortNames(), port =>
+                {
+                    constantPorts.Add(port);
+                });
+
             }
         }
 
